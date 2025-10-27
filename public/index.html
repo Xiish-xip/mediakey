@@ -120,7 +120,7 @@
   </div>
 
   <script>
-    let downloadMode = 'mp4'; // 'mp4' or 'mp3'
+    let downloadMode = 'mp4';
 
     function toggleMode(mode) {
       downloadMode = mode;
@@ -168,7 +168,7 @@
         sel.innerHTML = '';
         data.formats.forEach(f => {
           const size = f.filesize ? ` (${formatBytes(f.filesize)})` : '';
-          const opt = document.createElement('option'); // ✅ Fixed: `opt` is now declared
+          const opt = document.createElement('option'); // ✅ Fixed: `opt` is declared
           opt.value = f.format_id;
           opt.textContent = `${f.resolution}${size}`;
           sel.appendChild(opt);

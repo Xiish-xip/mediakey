@@ -2,13 +2,13 @@
 const express = require('express');
 const cors = require('cors');
 const { spawn } = require('child_process');
-const { createReadStream } = require('fs');
+const { createReadStream, unlink } = require('fs');
 const { tmpdir } = require('os');
 const { join } = require('path');
 const { randomBytes } = require('crypto');
 
 const app = express();
-const PORT = process.env.PORT || 10000; // Render uses 10000 by default
+const PORT = process.env.PORT || 10000;
 
 app.use(express.static('public'));
 app.use(cors());
@@ -40,6 +40,14 @@ function isYouTube(url) {
   return url.includes('youtube.com') || url.includes('youtu.be');
 }
 
+// Sanitize filename (remove unsafe chars)
+function sanitizeFilename(title) {
+  return title
+    .replace(/[<>:"/\\|?*\x00-\x1F]/g, '_')
+    .substring(0, 100)
+    .trim();
+}
+
 app.get('/api/info', (req, res) => {
   const url = req.query.url;
   const mode = (req.query.mode || 'mp4').toLowerCase();
@@ -60,11 +68,23 @@ app.get('/api/info', (req, res) => {
     });
   }
 
-  // Removed --no-call-home (deprecated)
+  // Build args with platform-specific fixes
   const args = ['--dump-json', '--no-warnings'];
+
+  // Instagram fix
+  if (url.includes('instagram.com')) {
+    args.push('--extractor-args', 'instagram:player_client=web');
+  }
+
+  // Facebook fix
+  if (url.includes('facebook.com') || url.includes('fb.watch')) {
+    args.push('--extractor-args', 'facebook:player_client=web');
+  }
+
   if (mode === 'mp3') {
     args.push('--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0');
   }
+
   args.push(url);
 
   const ytDlp = spawn('yt-dlp', args);
@@ -84,6 +104,9 @@ app.get('/api/info', (req, res) => {
       if (errorOutput.includes('HTTP Error 404')) {
         msg = 'Video not found. Link may be broken or deleted.';
       }
+      if (url.includes('instagram.com') && errorOutput.includes('Login required')) {
+        msg = 'Instagram requires login for this post. Only public posts work.';
+      }
       return res.status(500).json({ error: msg });
     }
 
@@ -95,14 +118,30 @@ app.get('/api/info', (req, res) => {
         formats = [{ format_id: 'bestaudio', ext: 'mp3', resolution: 'Audio only', filesize: info.filesize_approx || info.filesize }];
       } else {
         formats = (info.formats || [])
-          .filter(f => (f.vcodec !== 'none' && f.acodec !== 'none') || (f.acodec !== 'none' && f.vcodec === 'none'))
+          .filter(f => {
+            // Prioritize MP4 with H.264 + AAC
+            return f.ext === 'mp4' && f.vcodec?.startsWith('avc') && f.acodec !== 'none';
+          })
           .map(f => ({
             format_id: f.format_id,
             ext: f.ext,
-            resolution: f.resolution || f.format_note || (f.acodec !== 'none' && f.vcodec === 'none' ? 'Audio only' : 'Unknown'),
+            resolution: f.resolution || f.format_note || 'Unknown',
             filesize: f.filesize || f.filesize_approx
           }))
           .sort((a, b) => (b.filesize || 0) - (a.filesize || 0));
+
+        // Fallback if no MP4
+        if (formats.length === 0) {
+          formats = (info.formats || [])
+            .filter(f => (f.vcodec !== 'none' && f.acodec !== 'none'))
+            .map(f => ({
+              format_id: f.format_id,
+              ext: f.ext,
+              resolution: f.resolution || f.format_note || 'Auto',
+              filesize: f.filesize || f.filesize_approx
+            }))
+            .sort((a, b) => (b.filesize || 0) - (a.filesize || 0));
+        }
 
         if (formats.length === 0) {
           formats = [{ format_id: 'best', ext: 'mp4', resolution: 'Auto (best)', filesize: null }];
@@ -110,7 +149,7 @@ app.get('/api/info', (req, res) => {
       }
 
       res.json({
-        title: (info.title || 'Media').substring(0, 100),
+        title: info.title || 'Media',
         thumbnail: info.thumbnail || '',
         duration: info.duration,
         formats: formats
@@ -143,22 +182,44 @@ app.get('/api/download', async (req, res) => {
   const tempOutput = join(tmpdir(), `${randomBytes(16).toString('hex')}.${mode === 'mp3' ? 'mp3' : 'mp4'}`);
 
   try {
+    // Fetch metadata to get title for filename
+    const metaArgs = ['--dump-json', '--no-warnings'];
+    if (url.includes('instagram.com')) metaArgs.push('--extractor-args', 'instagram:player_client=web');
+    if (url.includes('facebook.com') || url.includes('fb.watch')) metaArgs.push('--extractor-args', 'facebook:player_client=web');
+    metaArgs.push(url);
+
+    let metaOutput = '';
+    const metaProc = spawn('yt-dlp', metaArgs);
+    metaProc.stdout.on('data', (data) => metaOutput += data.toString());
     await new Promise((resolve, reject) => {
-      const ytDlp = spawn('yt-dlp', [
-        '-f', formatId,
-        '-o', tempInput,
-        ...(mode === 'mp3' ? ['--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0'] : []),
-        url
-      ]);
-      ytDlp.on('close', (code) => code === 0 ? resolve() : reject(new Error(`yt-dlp failed`)));
+      metaProc.on('close', (code) => code === 0 ? resolve() : reject(new Error('Metadata fetch failed')));
+    });
+    const meta = JSON.parse(metaOutput);
+    const safeTitle = sanitizeFilename(meta.title || 'MediaKey');
+
+    // Download raw stream
+    const dlArgs = ['-f', formatId, '-o', tempInput];
+    if (url.includes('instagram.com')) dlArgs.push('--extractor-args', 'instagram:player_client=web');
+    if (url.includes('facebook.com') || url.includes('fb.watch')) dlArgs.push('--extractor-args', 'facebook:player_client=web');
+    if (mode === 'mp3') {
+      dlArgs.push('--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0');
+    }
+    dlArgs.push(url);
+
+    await new Promise((resolve, reject) => {
+      const ytDlp = spawn('yt-dlp', dlArgs);
+      ytDlp.on('close', (code) => code === 0 ? resolve() : reject(new Error(`yt-dlp failed: ${code}`)));
       ytDlp.stderr.on('data', (data) => console.error('yt-dlp stderr:', data.toString()));
     });
 
+    // Remux to MP4 (H.264 + AAC) for universal playback
     if (mode === 'mp4') {
       await new Promise((resolve, reject) => {
         const ffmpeg = spawn('ffmpeg', [
           '-i', tempInput,
-          '-c', 'copy',
+          '-c:v', 'libx264',
+          '-c:a', 'aac',
+          '-strict', 'experimental',
           '-movflags', '+faststart',
           '-y',
           tempOutput
@@ -170,25 +231,28 @@ app.get('/api/download', async (req, res) => {
       require('fs').renameSync(tempInput, tempOutput);
     }
 
+    // Set filename with original title
+    const ext = mode === 'mp3' ? 'mp3' : 'mp4';
+    const filename = `${safeTitle}.${ext}`;
     res.setHeader('Content-Type', mode === 'mp3' ? 'audio/mpeg' : 'video/mp4');
-    res.setHeader('Content-Disposition', `attachment; filename="MediaKey.${mode === 'mp3' ? 'mp3' : 'mp4'}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+
     const stream = createReadStream(tempOutput);
     stream.pipe(res);
 
     stream.on('end', () => {
-      require('fs').unlink(tempInput, () => {});
-      require('fs').unlink(tempOutput, () => {});
+      unlink(tempInput, () => {});
+      unlink(tempOutput, () => {});
     });
 
   } catch (err) {
     console.error('Download error:', err);
     res.status(500).json({ error: 'Download failed. Try again.' });
-    require('fs').unlink(tempInput, () => {});
-    require('fs').unlink(tempOutput, () => {});
+    unlink(tempInput, () => {});
+    unlink(tempOutput, () => {});
   }
 });
 
-// Bind to 0.0.0.0 for Render
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎥 MediaKey running on port ${PORT}`);
 });

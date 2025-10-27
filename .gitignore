@@ -2,3 +2,4 @@ echo "node_modules/
 .env
 .DS_Store" > .gitignorenode_modules/
 node_modules/
+node_modules/
