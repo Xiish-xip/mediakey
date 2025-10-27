@@ -36,7 +36,6 @@ function isSupportedPlatform(url) {
   return supported.some(domain => url.includes(domain));
 }
 
-// Block YouTube explicitly
 function isYouTube(url) {
   return url.includes('youtube.com') || url.includes('youtu.be');
 }
@@ -61,7 +60,8 @@ app.get('/api/info', (req, res) => {
     });
   }
 
-  const args = ['--dump-json', '--no-warnings', '--no-call-home'];
+  // Removed --no-call-home (deprecated)
+  const args = ['--dump-json', '--no-warnings'];
   if (mode === 'mp3') {
     args.push('--extract-audio', '--audio-format', 'mp3', '--audio-quality', '0');
   }
@@ -80,6 +80,9 @@ app.get('/api/info', (req, res) => {
       let msg = 'Failed to analyze link. Make sure it’s a public post.';
       if (errorOutput.includes('Private') || errorOutput.includes('private')) {
         msg = 'This post is private or unavailable.';
+      }
+      if (errorOutput.includes('HTTP Error 404')) {
+        msg = 'Video not found. Link may be broken or deleted.';
       }
       return res.status(500).json({ error: msg });
     }
@@ -160,7 +163,7 @@ app.get('/api/download', async (req, res) => {
           '-y',
           tempOutput
         ]);
-        ffmpeg.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg failed')));
+        ffmpeg.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg remux failed')));
         ffmpeg.stderr.on('data', (data) => console.error('ffmpeg stderr:', data.toString()));
       });
     } else {
@@ -185,6 +188,7 @@ app.get('/api/download', async (req, res) => {
   }
 });
 
+// Bind to 0.0.0.0 for Render
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🎥 MediaKey running on port ${PORT}`);
 });

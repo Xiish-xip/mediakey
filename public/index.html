@@ -45,6 +45,7 @@
 </head>
 <body class="flex items-center justify-center p-4">
   <div class="glass-card w-full max-w-2xl rounded-3xl overflow-hidden">
+    <!-- Header -->
     <div class="p-6 text-center text-white">
       <h1 class="text-3xl font-bold mb-2">MediaKey</h1>
       <p class="opacity-90 mb-4">Paste a link → Download your content instantly</p>
@@ -59,7 +60,7 @@
       </div>
     </div>
 
-    <!-- Rest of your UI (same as before) -->
+    <!-- Input Section -->
     <div class="p-6 bg-white/10 backdrop-blur-sm">
       <div class="flex gap-2 mb-4">
         <input
@@ -84,12 +85,14 @@
       </div>
     </div>
 
+    <!-- Loading -->
     <div id="loading" class="hidden p-8 text-center text-white">
       <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent mb-2"></div>
       <p>Analyzing your link...</p>
       <p class="text-sm opacity-80 mt-1">This may take 5–10 seconds</p>
     </div>
 
+    <!-- Result -->
     <div id="result" class="hidden p-6">
       <div class="flex gap-4 mb-4">
         <img id="thumbnail" class="w-24 h-24 rounded-xl object-cover border border-white/20" onerror="this.style.display='none'" />
@@ -109,6 +112,7 @@
       </button>
     </div>
 
+    <!-- Error -->
     <div id="error" class="hidden p-6 text-center text-white">
       <i class="fas fa-exclamation-triangle text-2xl mb-2 text-yellow-400"></i>
       <p id="errorMessage" class="text-sm"></p>
@@ -116,7 +120,7 @@
   </div>
 
   <script>
-    let downloadMode = 'mp4';
+    let downloadMode = 'mp4'; // 'mp4' or 'mp3'
 
     function toggleMode(mode) {
       downloadMode = mode;
@@ -164,6 +168,7 @@
         sel.innerHTML = '';
         data.formats.forEach(f => {
           const size = f.filesize ? ` (${formatBytes(f.filesize)})` : '';
+          const opt = document.createElement('option'); // ✅ Fixed: `opt` is now declared
           opt.value = f.format_id;
           opt.textContent = `${f.resolution}${size}`;
           sel.appendChild(opt);
