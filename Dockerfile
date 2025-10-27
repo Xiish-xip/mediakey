@@ -1,8 +1,8 @@
 # Dockerfile
 FROM python:3.12-slim
 
-# Install system deps
-RUN apt-get update && apt-get install -y \
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
     git \
@@ -17,13 +17,18 @@ RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o 
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs
 
+# Set working directory
 WORKDIR /app
 
+# Copy package files and install dependencies
 COPY package*.json ./
 RUN npm ci --only=production
 
+# Copy app source
 COPY . .
 
+# Expose port
 EXPOSE 3000
 
+# Start server
 CMD ["node", "server.js"]
