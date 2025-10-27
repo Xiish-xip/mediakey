@@ -21,20 +21,29 @@
   </script>
   <style>
     body {
-      background: linear-gradient(135deg, #8b5cf6, #ec4899, #0ea5e9);
-      background-size: 300% 300%;
-      animation: gradientBG 20s ease infinite;
       min-height: 100vh;
+      
+      position: relative;
+      overflow: hidden;
     }
-    @keyframes gradientBG {
-      0% { background-position: 0% 50%; }
-      50% { background-position: 100% 50%; }
-      100% { background-position: 0% 50%; }
+    body::before {
+      content: "";
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background-image: url('bg.jpg');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      
+      z-index: -1;
     }
     .glass-card {
-      background: rgba(255, 255, 255, 0.12);
-      backdrop-filter: blur(16px);
-      -webkit-backdrop-filter: blur(16px);
+     
+      backdrop-filter: blur(5px);
+      -webkit-backdrop-filter: blur(5px);
       border: 1px solid rgba(255, 255, 255, 0.15);
       box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
     }
@@ -168,7 +177,7 @@
         sel.innerHTML = '';
         data.formats.forEach(f => {
           const size = f.filesize ? ` (${formatBytes(f.filesize)})` : '';
-          const opt = document.createElement('option'); // ✅ Fixed: `opt` is declared
+          const opt = document.createElement('option');
           opt.value = f.format_id;
           opt.textContent = `${f.resolution}${size}`;
           sel.appendChild(opt);
