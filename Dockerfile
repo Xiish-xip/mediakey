@@ -1,34 +1,28 @@
-# Dockerfile
-FROM python:3.12-slim
+# Use Node 20 as the base
+FROM node:20-slim
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    curl \
+# Install Python, Pip, and FFmpeg (Essential for Apex v7.4)
+RUN apt-get update && apt-get install -y \
+    python3 \
+    python3-pip \
     ffmpeg \
-    git \
-    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# Install yt-dlp
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp \
-    && chmod a+rx /usr/local/bin/yt-dlp
-
-# Install Node.js 20
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
-    && apt-get install -y nodejs
+# Install yt-dlp with the "Anti-Block" networking plugins
+RUN pip3 install --no-cache-dir -U "yt-dlp[default,curl-cffi]"
 
 # Set working directory
 WORKDIR /app
 
-# Copy package files and install dependencies
+# Copy package files and install Node dependencies
 COPY package*.json ./
-RUN npm ci --only=production
+RUN npm install
 
-# Copy app source
+# Copy the rest of the code (server.js and public folder)
 COPY . .
 
-# Expose port
-EXPOSE 3000
+# Match Render's default port
+EXPOSE 10000
 
-# Start server
+# Start the engine
 CMD ["node", "server.js"]

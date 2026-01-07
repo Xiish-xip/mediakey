@@ -1,18 +1,15 @@
 /**
- * MediaKey Pro — Apex Industrial v7.2
- * 400-Line Optimized Studio Engine
+ * MEDIAKEY APEX - VERSION 7.4
+ * --------------------------------------------------
+ * Optimized for: MacBook Pro & Render.com
+ * Hybrid Audio Extraction & Chrome Mimicry
+ * --------------------------------------------------
  */
 
 const express = require('express');
 const cors = require('cors');
 const { spawn, execSync } = require('child_process');
-const { 
-    unlink, 
-    existsSync, 
-    mkdirSync, 
-    statSync, 
-    readdirSync 
-} = require('fs');
+const { unlink, existsSync, mkdirSync, readdirSync, statSync } = require('fs');
 const { tmpdir } = require('os');
 const { join } = require('path');
 const { randomBytes } = require('crypto');
@@ -20,7 +17,7 @@ const { randomBytes } = require('crypto');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// --- CONFIG & DIRECTORIES ---
+// VAULT CONFIG
 const VAULT_DIR = join(tmpdir(), 'mediakey_apex_vault');
 if (!existsSync(VAULT_DIR)) mkdirSync(VAULT_DIR, { recursive: true });
 
@@ -28,107 +25,91 @@ app.use(express.static('public'));
 app.use(cors());
 app.use(express.json());
 
-// --- UTILITIES ---
+// INDUSTRIAL LOGGER
 const log = (tag, msg, err = null) => {
-    console.log(`[${new Date().toLocaleTimeString()}] ${tag} ${msg}`);
-    if (err) console.error(err?.message || err);
+    const time = new Date().toLocaleTimeString();
+    console.log(`[${time}] ${tag} ${msg}`);
+    if (err) console.error(`   ⚠️ SYSTEM_ERROR: ${err.message || err}`);
 };
 
 /**
- * Strips dangerous chars but keeps it readable.
- * Crucial for avoiding "Invalid Header" errors.
+ * AUTO-MAINTENANCE
+ * Keeps the server lightweight by purging the vault every 10 minutes.
+ */
+const cleanVault = () => {
+    try {
+        const now = Date.now();
+        readdirSync(VAULT_DIR).forEach(file => {
+            const filePath = join(VAULT_DIR, file);
+            const stats = statSync(filePath);
+            if (now - stats.mtimeMs > 1800000) unlink(filePath, () => {}); // 30 Min limit
+        });
+    } catch (e) {}
+};
+setInterval(cleanVault, 600000);
+
+/**
+ * FILENAME SANITIZER
  */
 function getSafeFileName(title, ext) {
     let base = (title || "MediaKey")
-        .replace(/[^\x00-\x7F]/g, "") // Remove Emojis/Unicode
+        .replace(/[^\x00-\x7F]/g, "") 
         .replace(/[<>:"/\\|?*\x00-\x1F]/g, '')
         .replace(/\s+/g, '_')
-        .substring(0, 70) || "Media_File";
+        .substring(0, 75) || "Download";
     return `${base}.${ext}`;
 }
 
-// --- CORE API ---
-
 /**
- * Metadata Endpoint
+ * API: ANALYZE SOURCE
  */
 app.get('/api/info', async (req, res) => {
     const { url, mode } = req.query;
     if (!url) return res.status(400).json({ error: 'URL required' });
 
-    log('🔍 [INFO]', `Analyzing: ${url.substring(0, 40)}...`);
+    log('🔍 [INFO]', `Analyzing: ${url.substring(0, 45)}...`);
 
+    // We use a generic high-quality User-Agent as a fallback for impersonation
     const args = [
         '--no-warnings', '--dump-json', '--no-check-certificates',
-        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36',
+        '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         url
     ];
 
     const proc = spawn('yt-dlp', args);
     let output = '';
-    let errorLog = '';
-
     proc.stdout.on('data', (d) => output += d);
-    proc.stderr.on('data', (d) => errorLog += d);
-
     proc.on('close', (code) => {
-        if (code !== 0) {
-            log('❌ [ERROR]', 'yt-dlp info failed', errorLog);
-            return res.status(500).json({ error: "Platform blocked access." });
-        }
+        if (code !== 0) return res.status(500).json({ error: "Platform blocked request." });
         try {
             const data = JSON.parse(output);
-            let formats = mode === 'mp3' 
-                ? [{ format_id: 'bestaudio', resolution: 'High Quality MP3', ext: 'mp3' }]
-                : (data.formats || [])
+            let formats = [];
+
+            if (mode === 'mp3') {
+                formats = [{ format_id: 'bestaudio/best', resolution: 'Studio Grade MP3', ext: 'mp3' }];
+            } else {
+                formats = (data.formats || [])
                     .filter(f => f.ext === 'mp4' && f.vcodec !== 'none')
                     .map(f => ({
                         format_id: f.format_id,
-                        resolution: f.resolution || f.format_note || 'Standard',
-                        filesize: f.filesize || f.filesize_approx,
+                        resolution: f.resolution || `${f.height}p` || 'HD',
                         ext: 'mp4'
-                    })).reverse().slice(0, 8);
-            
-            if (mode !== 'mp3') {
-                formats.unshift({ format_id: 'bestvideo+bestaudio/best', resolution: 'Auto Best (Stitched)', ext: 'mp4' });
+                    })).reverse().slice(0, 6);
+                formats.unshift({ format_id: 'bv+ba/b', resolution: 'Apex Best (Auto)', ext: 'mp4' });
             }
 
-            res.json({ 
-                title: data.title, 
-                thumbnail: data.thumbnail, 
-                uploader: data.uploader || 'Source', 
-                formats 
+            res.json({
+                title: data.title,
+                thumbnail: data.thumbnail,
+                uploader: data.uploader || 'Social Source',
+                formats
             });
-        } catch (e) { 
-            res.status(500).json({ error: "Data Parsing Error" }); 
-        }
+        } catch (e) { res.status(500).json({ error: "Parsing failure." }); }
     });
 });
 
 /**
- * Instant 10s Preview
- */
-app.get('/api/preview', (req, res) => {
-    const id = randomBytes(4).toString('hex');
-    const out = join(VAULT_DIR, `prev_${id}.mp4`);
-    const proc = spawn('yt-dlp', [
-        '-f', 'mp4[height<=480]/best[height<=480]', 
-        '--downloader', 'ffmpeg', 
-        '--downloader-args', 'ffmpeg:-ss 00:00:00 -t 00:00:10', 
-        '-o', out, 
-        req.query.url
-    ]);
-    proc.on('close', () => {
-        if (existsSync(out)) {
-            res.sendFile(out, () => unlink(out, () => {}));
-        } else {
-            res.status(404).send();
-        }
-    });
-});
-
-/**
- * Main Download Engine (The Fixer)
+ * API: EXECUTE DOWNLOAD
  */
 app.get('/api/download', async (req, res) => {
     const { url, mode, format_id } = req.query;
@@ -140,73 +121,68 @@ app.get('/api/download', async (req, res) => {
     log('🚀 [START]', `ID: ${reqID} | Mode: ${mode}`);
 
     try {
-        // 1. Fetch Title for Header
+        // 1. Resolve Title
         let title = "MediaKey_File";
-        try { 
-            title = execSync(`yt-dlp --get-title "${url}"`, { encoding: 'utf8', timeout: 4000 }).trim(); 
-        } catch(e) { log('⚠️ [WARN]', 'Title fetch failed'); }
+        try {
+            title = execSync(`yt-dlp --get-title --no-check-certificates "${url}"`, { encoding: 'utf8', timeout: 5000 }).trim();
+        } catch(e) {}
 
-        // 2. Download with dynamic extension
+        // 2. Download Phase
+        // HYBRID FIX: For TikTok MP3s, we download the combined video (best) 
+        // to ensure we actually get the file, then let FFmpeg strip the audio.
         const dlArgs = [
-            '--no-check-certificates', 
-            '--user-agent', 'Mozilla/5.0',
-            '-f', isMp3 ? 'bestaudio' : (format_id || 'bv*[ext=mp4]+ba[ext=m4a]/best'),
+            '--no-check-certificates',
+            '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            '-f', isMp3 ? 'b/ba' : (format_id || 'bv+ba/b'),
             '-o', `${rawBase}.%(ext)s`,
             url
         ];
 
         await new Promise((resolve, reject) => {
             const p = spawn('yt-dlp', dlArgs);
-            p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Download fail: ${code}`)));
+            p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit ${code}`)));
         });
 
-        // 3. Find exactly what file was created (fixes the FFmpeg failure)
-        const downloadedFile = readdirSync(VAULT_DIR).find(f => f.startsWith(`raw_${reqID}`));
-        if (!downloadedFile) throw new Error("File not written to disk");
-        const fullRawPath = join(VAULT_DIR, downloadedFile);
+        // 3. Locate Raw File
+        const rawFile = readdirSync(VAULT_DIR).find(f => f.startsWith(`raw_${reqID}`));
+        if (!rawFile) throw new Error("File missing");
+        const fullRawPath = join(VAULT_DIR, rawFile);
 
-        // 4. Industrial FFmpeg Processing
-        log('🛠️ [FFMPEG]', `Processing: ${downloadedFile}`);
+        // 4. Processing Phase (FFmpeg)
+        log('🛠️ [FFMPEG]', `Converting: ${rawFile} to ${isMp3 ? 'MP3' : 'MP4'}`);
+        
         const ffArgs = isMp3 
-            ? ['-i', fullRawPath, '-acodec', 'libmp3lame', '-ab', '192k', '-y', finalPath]
+            ? ['-i', fullRawPath, '-vn', '-acodec', 'libmp3lame', '-ab', '192k', '-ar', '44100', '-y', finalPath]
             : ['-i', fullRawPath, '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-movflags', 'faststart', '-y', finalPath];
 
         await new Promise((resolve, reject) => {
             const p = spawn('ffmpeg', ffArgs);
-            p.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg processing error')));
+            p.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg error')));
         });
 
-        // 5. Secure Header Delivery
+        // 5. Final Delivery
         if (existsSync(finalPath)) {
             const safeName = getSafeFileName(title, isMp3 ? 'mp3' : 'mp4');
-            const encodedName = encodeURIComponent(safeName);
-
-            // RFC 5987 Compliance Fix
-            res.setHeader('Content-Disposition', `attachment; filename="${safeName}"; filename*=UTF-8''${encodedName}`);
-            res.setHeader('Content-Type', isMp3 ? 'audio/mpeg' : 'video/mp4');
-
-            res.download(finalPath, safeName, (err) => {
-                // Cleanup all instances of this request
-                readdirSync(VAULT_DIR).filter(f => f.includes(reqID)).forEach(f => {
-                    unlink(join(VAULT_DIR, f), () => {});
-                });
+            res.setHeader('Content-Disposition', `attachment; filename="${safeName}"; filename*=UTF-8''${encodeURIComponent(safeName)}`);
+            
+            res.download(finalPath, safeName, () => {
+                // Wipe all request files immediately after download
+                readdirSync(VAULT_DIR).filter(f => f.includes(reqID)).forEach(f => unlink(join(VAULT_DIR, f), () => {}));
                 log('✅ [DONE]', `ID: ${reqID} delivered`);
             });
         }
     } catch (err) {
         log('❌ [FAIL]', `ID: ${reqID}`, err);
-        res.status(500).json({ error: "Media processing failed." });
-        // Cleanup on error
-        readdirSync(VAULT_DIR).filter(f => f.includes(reqID)).forEach(f => {
-            unlink(join(VAULT_DIR, f), () => {});
-        });
+        res.status(500).json({ error: "System failure" });
+        // Emergency purge
+        readdirSync(VAULT_DIR).filter(f => f.includes(reqID)).forEach(f => unlink(join(VAULT_DIR, f), () => {}));
     }
 });
 
 app.listen(PORT, '0.0.0.0', () => {
     console.log(`
     --------------------------------------------------
-    🚀 MEDIAKEY APEX ENGINE v7.2 ONLINE
+    🚀 MEDIAKEY APEX ENGINE v7.4 ONLINE
     📡 PORT: ${PORT}
     📂 VAULT: ${VAULT_DIR}
     --------------------------------------------------
