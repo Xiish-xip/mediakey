@@ -1,214 +1,350 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>MediaKey — Download Your Content</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
-  <script>
-    tailwind.config = {
-      theme: {
-        extend: {
-          colors: {
-            primary: '#6366f1',
-            secondary: '#f43f5e',
-            accent: '#0ea5e9',
-          }
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>MediaKey Apex — Studio</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;900&family=JetBrains+Mono&display=swap');
+
+        :root {
+            --accent: #6366f1;
+            --accent-glow: rgba(99, 102, 241, 0.4);
+            --glass-strong: rgba(10, 12, 18, 0.85);
+            --border: rgba(255, 255, 255, 0.08);
         }
-      }
-    }
-  </script>
-  <style>
-    body {
-      min-height: 100vh;
-      
-      position: relative;
-      overflow: hidden;
-    }
-    body::before {
-      content: "";
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-image: url('bg.jpg');
-      background-size: cover;
-      background-position: center;
-      background-repeat: no-repeat;
-      
-      z-index: -1;
-    }
-    .glass-card {
-     
-      backdrop-filter: blur(5px);
-      -webkit-backdrop-filter: blur(5px);
-      border: 1px solid rgba(255, 255, 255, 0.15);
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
-    }
-    .platform-icon {
-      font-size: 1.2rem;
-    }
-  </style>
+
+        body {
+            background: #020408;
+            color: #e2e8f0;
+            font-family: 'Outfit', sans-serif;
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        #bg-canvas { position: fixed; inset: 0; z-index: -1; filter: blur(100px); opacity: 0.5; }
+
+        .app-shell {
+            width: 100%;
+            max-width: 400px;
+            height: 98vh;
+            max-height: 820px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.8rem;
+            padding: 1rem;
+        }
+
+        .glass-panel {
+            background: var(--glass-strong);
+            backdrop-filter: blur(40px);
+            -webkit-backdrop-filter: blur(40px);
+            border: 1px solid var(--border);
+            border-radius: 1.8rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.7);
+        }
+
+        .input-container {
+            position: relative;
+            background: rgba(0,0,0,0.6);
+            border-radius: 1.2rem;
+            border: 1px solid var(--border);
+            transition: 0.4s;
+        }
+
+        .input-container:focus-within {
+            border-color: var(--accent);
+            box-shadow: 0 0 20px var(--accent-glow);
+        }
+
+        .input-container input {
+            width: 100%;
+            background: transparent;
+            border: none;
+            padding: 1.1rem 1rem;
+            color: white;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        .tactical-tabs {
+            display: flex;
+            background: rgba(255,255,255,0.03);
+            border-radius: 1.1rem;
+            padding: 4px;
+        }
+
+        .tab-trigger {
+            flex: 1;
+            padding: 12px;
+            font-size: 11px;
+            font-weight: 800;
+            border-radius: 0.9rem;
+            transition: 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            color: rgba(255,255,255,0.3);
+        }
+
+        .tab-trigger.active {
+            background: var(--accent);
+            color: white;
+            box-shadow: 0 8px 15px -3px var(--accent-glow);
+        }
+
+        .media-viewport {
+            width: 100%;
+            aspect-ratio: 16/9;
+            background: #000;
+            border-radius: 1.3rem;
+            overflow: hidden;
+            border: 1px solid var(--border);
+            position: relative;
+        }
+
+        .btn-apex {
+            background: white;
+            color: black;
+            font-weight: 900;
+            text-transform: uppercase;
+            font-size: 13px;
+            letter-spacing: 1px;
+            border-radius: 1.2rem;
+            height: 56px;
+            transition: 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            width: 100%;
+        }
+
+        .btn-apex:active { transform: scale(0.96); }
+
+        .btn-download { background: var(--accent); color: white; }
+
+        .history-node {
+            width: 55px;
+            height: 55px;
+            border-radius: 14px;
+            background: rgba(255,255,255,0.03);
+            border: 1px solid var(--border);
+            flex-shrink: 0;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        @keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+        .animate-up { animation: slideUp 0.4s ease forwards; }
+    </style>
 </head>
-<body class="flex items-center justify-center p-4">
-  <div class="glass-card w-full max-w-2xl rounded-3xl overflow-hidden">
-    <!-- Header -->
-    <div class="p-6 text-center text-white">
-      <h1 class="text-3xl font-bold mb-2">MediaKey</h1>
-      <p class="opacity-90 mb-4">Paste a link → Download your content instantly</p>
-      <div class="flex justify-center gap-3 text-xl">
-        <i class="fab fa-youtube text-gray-500 opacity-40 platform-icon" title="Temporarily unavailable"></i>
-        <i class="fab fa-tiktok text-black platform-icon"></i>
-        <i class="fab fa-instagram text-pink-500 platform-icon"></i>
-        <i class="fab fa-twitter text-blue-400 platform-icon"></i>
-        <i class="fab fa-facebook text-blue-700 platform-icon"></i>
-        <i class="fab fa-twitch text-purple-500 platform-icon"></i>
-        <i class="fab fa-snapchat text-yellow-400 platform-icon"></i>
-      </div>
-    </div>
+<body>
 
-    <!-- Input Section -->
-    <div class="p-6 bg-white/10 backdrop-blur-sm">
-      <div class="flex gap-2 mb-4">
-        <input
-          type="text"
-          id="urlInput"
-          placeholder="https://tiktok.com/... or https://instagram.com/..."
-          class="flex-1 px-4 py-3 rounded-xl bg-white/20 border border-white/30 text-white placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-primary"
-        />
-        <button onclick="pasteClipboard()" class="px-4 py-3 bg-white/20 hover:bg-white/30 rounded-xl flex items-center justify-center text-white">
-          <i class="fas fa-paste"></i>
-        </button>
-      </div>
+    <canvas id="bg-canvas"></canvas>
 
-      <div class="flex gap-2">
-        <button onclick="fetchInfo()" class="flex-1 py-3 bg-primary hover:bg-indigo-600 text-white font-medium rounded-xl transition flex items-center justify-center gap-2">
-          <i class="fas fa-key"></i> Unlock Media
-        </button>
-        <div class="flex gap-1">
-          <button id="mp4Btn" class="px-4 py-3 bg-accent hover:bg-sky-600 text-white rounded-xl text-sm font-medium" onclick="toggleMode('mp4')">MP4</button>
-          <button id="mp3Btn" class="px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl text-sm font-medium" onclick="toggleMode('mp3')">MP3</button>
+    <div class="app-shell">
+        
+        <div class="flex items-center justify-between px-2">
+            <div>
+                <h1 class="text-xl font-black tracking-tighter">MEDIAKEY <span class="text-indigo-500">APEX</span></h1>
+                <p class="text-[9px] font-mono text-indigo-400/60 uppercase">Industrial Studio Engine v7.2</p>
+            </div>
+            <div class="w-9 h-9 glass-panel flex items-center justify-center border-white/5">
+                <i class="fas fa-microchip text-indigo-400 text-xs"></i>
+            </div>
         </div>
-      </div>
-    </div>
 
-    <!-- Loading -->
-    <div id="loading" class="hidden p-8 text-center text-white">
-      <div class="inline-block h-8 w-8 animate-spin rounded-full border-4 border-white border-t-transparent mb-2"></div>
-      <p>Analyzing your link...</p>
-      <p class="text-sm opacity-80 mt-1">This may take 5–10 seconds</p>
-    </div>
+        <div class="glass-panel p-4 space-y-4">
+            <div class="input-container">
+                <input type="text" id="urlInput" placeholder="Paste link here...">
+                <button onclick="handlePaste()" class="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white">
+                    <i class="fas fa-paste text-sm"></i>
+                </button>
+            </div>
 
-    <!-- Result -->
-    <div id="result" class="hidden p-6">
-      <div class="flex gap-4 mb-4">
-        <img id="thumbnail" class="w-24 h-24 rounded-xl object-cover border border-white/20" onerror="this.style.display='none'" />
-        <div class="flex-1">
-          <h3 id="title" class="text-white font-bold text-lg line-clamp-2 mb-1"></h3>
-          <p id="duration" class="text-white/80 text-sm"></p>
+            <div class="tactical-tabs">
+                <button id="mp4Tab" onclick="switchMode('mp4')" class="tab-trigger active">Video</button>
+                <button id="mp3Tab" onclick="switchMode('mp3')" class="tab-trigger">Audio</button>
+            </div>
+
+            <button onclick="startAnalysis()" id="analyzeBtn" class="btn-apex">Process Source</button>
         </div>
-      </div>
 
-      <div class="mb-4">
-        <label class="block text-white/90 text-sm font-medium mb-2">Choose format</label>
-        <select id="formatSelect" class="w-full p-3 rounded-xl bg-white/10 border border-white/20 text-white focus:outline-none focus:ring-2 focus:ring-primary"></select>
-      </div>
+        <div id="result-container" class="hidden glass-panel p-3 flex flex-col gap-3 animate-up flex-1 min-h-0">
+            <div class="media-viewport">
+                <video id="video-preview" class="w-full h-full object-cover hidden" playsinline></video>
+                <div id="video-overlay" class="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-[2px] cursor-pointer" onclick="loadPreview()">
+                    <img id="thumb-placeholder" class="absolute inset-0 w-full h-full object-cover opacity-50 blur-[2px]">
+                    <div class="z-10 w-14 h-14 rounded-full bg-white/10 border border-white/20 flex items-center justify-center backdrop-blur-xl">
+                        <i class="fas fa-play text-white text-sm ml-1"></i>
+                    </div>
+                    <span class="z-10 text-[10px] font-black uppercase tracking-[3px] mt-3 text-white/80">Preview</span>
+                </div>
+            </div>
 
-      <button onclick="download()" class="w-full py-3 bg-secondary hover:bg-rose-600 text-white font-medium rounded-xl flex items-center justify-center gap-2">
-        <i class="fas fa-download"></i> Download Now
-      </button>
+            <div class="px-1">
+                <h2 id="media-title" class="text-xs font-bold truncate">Filename Placeholder</h2>
+                <div class="flex items-center gap-2 mt-1">
+                    <span id="badge-mode" class="text-[8px] px-1.5 py-0.5 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded font-black">MP4</span>
+                    <p id="badge-uploader" class="text-[9px] text-white/30 font-bold truncate uppercase tracking-tighter">Identity</p>
+                </div>
+            </div>
+
+            <div class="mt-auto space-y-2">
+                <select id="qualitySelect" class="w-full bg-black/40 border border-white/5 rounded-xl p-3 text-[11px] font-bold text-white outline-none"></select>
+                
+                <div class="flex gap-2">
+                    <button onclick="triggerDownload()" id="dl-button" class="btn-apex btn-download flex-[3]">
+                        <i class="fas fa-bolt-lightning mr-2"></i> Start Download
+                    </button>
+                    <button onclick="invokeShare()" id="share-button" class="hidden btn-apex flex-1 bg-white/5 text-white border border-white/10">
+                        <i class="fas fa-share-nodes"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="mt-auto">
+            <p class="text-[10px] font-black text-white/10 uppercase tracking-widest ml-2 mb-2">Vault History</p>
+            <div id="history-list" class="flex gap-2 overflow-x-auto pb-2 no-scroll"></div>
+        </div>
+
     </div>
 
-    <!-- Error -->
-    <div id="error" class="hidden p-6 text-center text-white">
-      <i class="fas fa-exclamation-triangle text-2xl mb-2 text-yellow-400"></i>
-      <p id="errorMessage" class="text-sm"></p>
-    </div>
-  </div>
+    <script>
+        let currentMode = 'mp4';
+        let currentBlob = null;
+        let mediaCache = null;
 
-  <script>
-    let downloadMode = 'mp4';
+        // --- Background Animation ---
+        const canvas = document.getElementById('bg-canvas');
+        const ctx = canvas.getContext('2d');
+        let points = [];
+        function resize() { canvas.width = window.innerWidth; canvas.height = window.innerHeight; }
+        class Point {
+            constructor() {
+                this.x = Math.random() * canvas.width; this.y = Math.random() * canvas.height;
+                this.vx = (Math.random() - 0.5) * 1.2; this.vy = (Math.random() - 0.5) * 1.2;
+                this.radius = Math.random() * 200 + 100; this.color = Math.random() > 0.5 ? '#4f46e5' : '#7c3aed';
+            }
+            draw() {
+                this.x += this.vx; this.y += this.vy;
+                if(this.x<0 || this.x>canvas.width) this.vx*=-1;
+                if(this.y<0 || this.y>canvas.height) this.vy*=-1;
+                ctx.beginPath(); ctx.arc(this.x, this.y, this.radius, 0, Math.PI*2);
+                ctx.fillStyle = this.color; ctx.fill();
+            }
+        }
+        function init() { resize(); points = Array.from({length: 6}, () => new Point()); loop(); }
+        function loop() { ctx.clearRect(0,0,canvas.width, canvas.height); points.forEach(p => p.draw()); requestAnimationFrame(loop); }
+        window.addEventListener('resize', resize);
+        init();
 
-    function toggleMode(mode) {
-      downloadMode = mode;
-      document.getElementById('mp4Btn').className = mode === 'mp4' 
-        ? 'px-4 py-3 bg-accent hover:bg-sky-600 text-white rounded-xl text-sm font-medium'
-        : 'px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl text-sm font-medium';
-      document.getElementById('mp3Btn').className = mode === 'mp3'
-        ? 'px-4 py-3 bg-accent hover:bg-sky-600 text-white rounded-xl text-sm font-medium'
-        : 'px-4 py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl text-sm font-medium';
-    }
+        // --- Core Functions ---
+        function switchMode(m) {
+            currentMode = m;
+            document.getElementById('mp4Tab').classList.toggle('active', m === 'mp4');
+            document.getElementById('mp3Tab').classList.toggle('active', m === 'mp3');
+        }
 
-    async function pasteClipboard() {
-      try {
-        const text = await navigator.clipboard.readText();
-        document.getElementById('urlInput').value = text;
-      } catch (e) {
-        showError('Clipboard access denied. Please paste manually.');
-      }
-    }
+        async function handlePaste() {
+            const text = await navigator.clipboard.readText();
+            if(text) document.getElementById('urlInput').value = text;
+        }
 
-    function formatBytes(bytes) {
-      if (!bytes) return 'Unknown';
-      const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(1024));
-      return `${(bytes / Math.pow(1024, i)).toFixed(1)} ${sizes[i]}`;
-    }
+        async function startAnalysis() {
+            const url = document.getElementById('urlInput').value.trim();
+            if(!url) return;
+            const btn = document.getElementById('analyzeBtn');
+            btn.innerHTML = `<i class="fas fa-spinner fa-spin"></i>`;
+            
+            try {
+                const r = await fetch(`/api/info?url=${encodeURIComponent(url)}&mode=${currentMode}`);
+                const data = await r.json();
+                if(data.error) throw new Error(data.error);
 
-    async function fetchInfo() {
-      const url = document.getElementById('urlInput').value.trim();
-      if (!url) return showError('Please enter a valid link');
+                mediaCache = data;
+                document.getElementById('media-title').innerText = data.title;
+                document.getElementById('thumb-placeholder').src = data.thumbnail;
+                document.getElementById('badge-uploader').innerText = data.uploader;
+                document.getElementById('badge-mode').innerText = currentMode.toUpperCase();
+                
+                document.getElementById('qualitySelect').innerHTML = data.formats.map(f => `
+                    <option value="${f.format_id}">${f.resolution} ${f.filesize ? '— '+(f.filesize/1024/1024).toFixed(1)+'MB' : ''}</option>
+                `).join('');
 
-      hideAll();
-      document.getElementById('loading').classList.remove('hidden');
+                document.getElementById('result-container').classList.remove('hidden');
+                document.getElementById('result-container').style.display = 'flex';
+                document.getElementById('video-preview').classList.add('hidden');
+                document.getElementById('video-overlay').style.display = 'flex';
+            } catch(e) { alert("Analysis failed. Try again."); }
+            finally { btn.innerText = 'Process Source'; }
+        }
 
-      try {
-        const res = await fetch(`/api/info?url=${encodeURIComponent(url)}&mode=${downloadMode}`);
-        const data = await res.json();
-        if (data.error) throw new Error(data.error);
+        async function loadPreview() {
+            const url = document.getElementById('urlInput').value;
+            const vid = document.getElementById('video-preview');
+            const over = document.getElementById('video-overlay');
+            over.innerHTML = `<i class="fas fa-circle-notch fa-spin text-white"></i>`;
+            vid.src = `/api/preview?url=${encodeURIComponent(url)}`;
+            vid.onloadeddata = () => {
+                over.style.display = 'none';
+                vid.classList.remove('hidden');
+                vid.play(); vid.loop = true;
+            };
+        }
 
-        document.getElementById('title').innerText = data.title;
-        document.getElementById('thumbnail').src = data.thumbnail || '';
-        document.getElementById('duration').innerText = data.duration ? `Duration: ${Math.floor(data.duration / 60)}:${String(data.duration % 60).padStart(2, '0')}` : '';
+        async function triggerDownload() {
+            const btn = document.getElementById('dl-button');
+            const url = document.getElementById('urlInput').value;
+            const fid = document.getElementById('qualitySelect').value;
+            const original = btn.innerHTML;
+            
+            btn.innerHTML = `<i class="fas fa-sync fa-spin mr-2"></i> PROCESSING...`;
+            btn.disabled = true;
 
-        const sel = document.getElementById('formatSelect');
-        sel.innerHTML = '';
-        data.formats.forEach(f => {
-          const size = f.filesize ? ` (${formatBytes(f.filesize)})` : '';
-          const opt = document.createElement('option');
-          opt.value = f.format_id;
-          opt.textContent = `${f.resolution}${size}`;
-          sel.appendChild(opt);
-        });
+            try {
+                const r = await fetch(`/api/download?url=${encodeURIComponent(url)}&format_id=${fid}&mode=${currentMode}`);
+                if(!r.ok) throw new Error();
+                currentBlob = await r.blob();
+                
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(currentBlob);
+                a.download = `${mediaCache.title}.${currentMode}`;
+                a.click();
+                
+                saveToHistory(mediaCache.thumbnail);
+                if(navigator.share) document.getElementById('share-button').classList.remove('hidden');
+                btn.innerHTML = `<i class="fas fa-check mr-2"></i> SUCCESS`;
+            } catch(e) { btn.innerHTML = `ERROR`; }
+            finally { setTimeout(() => { btn.innerHTML = original; btn.disabled = false; }, 3000); }
+        }
 
-        document.getElementById('result').classList.remove('hidden');
-      } catch (e) {
-        showError(e.message || 'Failed to analyze link');
-      } finally {
-        document.getElementById('loading').classList.add('hidden');
-      }
-    }
+        function saveToHistory(t) {
+            let h = JSON.parse(localStorage.getItem('mk_apex_h') || '[]');
+            if(!h.includes(t)) {
+                h.unshift(t);
+                localStorage.setItem('mk_apex_h', JSON.stringify(h.slice(0, 10)));
+                renderHistory();
+            }
+        }
 
-    function download() {
-      const url = document.getElementById('urlInput').value;
-      const fid = document.getElementById('formatSelect').value;
-      const downloadUrl = `/api/download?url=${encodeURIComponent(url)}&format_id=${fid}&mode=${downloadMode}`;
-      window.location.href = downloadUrl;
-    }
+        function renderHistory() {
+            const h = JSON.parse(localStorage.getItem('mk_apex_h') || '[]');
+            document.getElementById('history-list').innerHTML = h.map(img => `
+                <div class="history-node"><img src="${img}" class="w-full h-full object-cover opacity-60"></div>
+            `).join('');
+        }
+        renderHistory();
 
-    function showError(msg) {
-      document.getElementById('errorMessage').innerText = msg;
-      hideAll();
-      document.getElementById('error').classList.remove('hidden');
-    }
-
-    function hideAll() {
-      document.getElementById('loading').classList.add('hidden');
-      document.getElementById('result').classList.add('hidden');
-      document.getElementById('error').classList.add('hidden');
-    }
-  </script>
+        async function invokeShare() {
+            if(!currentBlob) return;
+            const file = new File([currentBlob], `${mediaCache.title}.${currentMode}`, { type: currentBlob.type });
+            if(navigator.canShare && navigator.canShare({ files: [file] })) {
+                await navigator.share({ files: [file], title: mediaCache.title });
+            }
+        }
+    </script>
 </body>
 </html>
