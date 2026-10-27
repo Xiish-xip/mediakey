@@ -305,14 +305,17 @@
             btn.disabled = true;
 
             try {
-                const r = await fetch(`/api/download?url=${encodeURIComponent(url)}&format_id=${fid}&mode=${currentMode}`);
+                const titleParam = encodeURIComponent((mediaCache && mediaCache.title) || '');
+                const r = await fetch(`/api/download?url=${encodeURIComponent(url)}&format_id=${encodeURIComponent(fid)}&mode=${currentMode}&title=${titleParam}`);
                 if(!r.ok) throw new Error();
                 currentBlob = await r.blob();
                 
                 const a = document.createElement('a');
                 a.href = URL.createObjectURL(currentBlob);
                 a.download = `${mediaCache.title}.${currentMode}`;
+                document.body.appendChild(a);
                 a.click();
+                a.remove();
                 
                 saveToHistory(mediaCache.thumbnail);
                 if(navigator.share) document.getElementById('share-button').classList.remove('hidden');

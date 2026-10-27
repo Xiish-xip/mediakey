@@ -72,6 +72,8 @@ app.get('/api/info', async (req, res) => {
     // We use a generic high-quality User-Agent as a fallback for impersonation
     const args = [
         '--no-warnings', '--dump-json', '--no-check-certificates',
+        '--remote-components', 'ejs:github',
+        '--js-runtimes', 'node',
         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         url
     ];
@@ -79,6 +81,7 @@ app.get('/api/info', async (req, res) => {
     const proc = spawn('yt-dlp', args);
     let output = '';
     proc.stdout.on('data', (d) => output += d);
+    proc.stderr.on('data', () => {});
     proc.on('close', (code) => {
         if (code !== 0) return res.status(500).json({ error: "Platform blocked request." });
         try {
@@ -112,7 +115,7 @@ app.get('/api/info', async (req, res) => {
  * API: EXECUTE DOWNLOAD
  */
 app.get('/api/download', async (req, res) => {
-    const { url, mode, format_id } = req.query;
+    const { url, mode, format_id, title: reqTitle } = req.query;
     const isMp3 = mode === 'mp3';
     const reqID = randomBytes(4).toString('hex');
     const rawBase = join(VAULT_DIR, `raw_${reqID}`);
@@ -121,26 +124,43 @@ app.get('/api/download', async (req, res) => {
     log('🚀 [START]', `ID: ${reqID} | Mode: ${mode}`);
 
     try {
-        // 1. Resolve Title
-        let title = "MediaKey_File";
-        try {
-            title = execSync(`yt-dlp --get-title --no-check-certificates "${url}"`, { encoding: 'utf8', timeout: 5000 }).trim();
-        } catch(e) {}
+        // 1. Resolve Title (reuse the title the client already has)
+        let title = (reqTitle || "").trim() || "MediaKey_File";
+        if (!reqTitle) {
+            try {
+                title = execSync(`yt-dlp --get-title --no-check-certificates "${url}"`, { encoding: 'utf8', timeout: 8000 }).trim();
+            } catch(e) {}
+        }
 
         // 2. Download Phase
-        // HYBRID FIX: For TikTok MP3s, we download the combined video (best) 
-        // to ensure we actually get the file, then let FFmpeg strip the audio.
+        // Prefer MP4/M4A so the conversion step can just remux (fast).
+        const isAuto = !format_id || /^bv\*?\+ba\/b$/.test(format_id);
+        const chosenFmt = isAuto
+            ? 'bv*[ext=mp4]+ba[ext=m4a]/b[ext=mp4]/bv+ba/b'
+            : /[+\/]/.test(format_id) ? format_id : `${format_id}+ba/b`;
+
         const dlArgs = [
             '--no-check-certificates',
+            '--no-warnings',
+            '--no-playlist',
+            '--remote-components', 'ejs:github',
+            '--js-runtimes', 'node',
+            '--retries', '10',
+            '--fragment-retries', '10',
+            '--retry-sleep', '2',
+            '--concurrent-fragments', '4',
             '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            '-f', isMp3 ? 'b/ba' : (format_id || 'bv+ba/b'),
+            '-f', isMp3 ? 'ba/b' : chosenFmt,
             '-o', `${rawBase}.%(ext)s`,
             url
         ];
 
         await new Promise((resolve, reject) => {
             const p = spawn('yt-dlp', dlArgs);
-            p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`Exit ${code}`)));
+            let err = '';
+            p.stdout.on('data', () => {});
+            p.stderr.on('data', (d) => { err = (err + d.toString()).slice(-4000); });
+            p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`yt-dlp exit ${code}: ${err.trim().split('\n').slice(-2).join(' | ').slice(-300)}`)));
         });
 
         // 3. Locate Raw File
@@ -151,13 +171,20 @@ app.get('/api/download', async (req, res) => {
         // 4. Processing Phase (FFmpeg)
         log('🛠️ [FFMPEG]', `Converting: ${rawFile} to ${isMp3 ? 'MP3' : 'MP4'}`);
         
+        const srcExt = (fullRawPath.split('.').pop() || '').toLowerCase();
+        const isMp4Source = /^(mp4|m4v|mov)$/.test(srcExt);
         const ffArgs = isMp3 
             ? ['-i', fullRawPath, '-vn', '-acodec', 'libmp3lame', '-ab', '192k', '-ar', '44100', '-y', finalPath]
-            : ['-i', fullRawPath, '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-movflags', 'faststart', '-y', finalPath];
+            : isMp4Source
+                ? ['-i', fullRawPath, '-c', 'copy', '-movflags', '+faststart', '-y', finalPath]
+                : ['-i', fullRawPath, '-c:v', 'libx264', '-preset', 'ultrafast', '-c:a', 'aac', '-movflags', 'faststart', '-y', finalPath];
 
         await new Promise((resolve, reject) => {
             const p = spawn('ffmpeg', ffArgs);
-            p.on('close', (code) => code === 0 ? resolve() : reject(new Error('FFmpeg error')));
+            let err = '';
+            p.stdout.on('data', () => {});
+            p.stderr.on('data', (d) => { err = (err + d.toString()).slice(-4000); });
+            p.on('close', (code) => code === 0 ? resolve() : reject(new Error(`FFmpeg exit ${code}: ${err.trim().split('\n').slice(-1)[0].slice(-200)}`)));
         });
 
         // 5. Final Delivery
