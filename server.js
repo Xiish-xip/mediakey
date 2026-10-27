@@ -9,7 +9,7 @@
 const express = require('express');
 const cors = require('cors');
 const { spawn, execSync } = require('child_process');
-const { unlink, existsSync, mkdirSync, readdirSync, statSync } = require('fs');
+const { unlink, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } = require('fs');
 const { tmpdir } = require('os');
 const { join } = require('path');
 const { randomBytes } = require('crypto');
@@ -31,6 +31,26 @@ const log = (tag, msg, err = null) => {
     console.log(`[${time}] ${tag} ${msg}`);
     if (err) console.error(`   ⚠️ SYSTEM_ERROR: ${err.message || err}`);
 };
+
+// OPTIONAL CLOUD CONFIG
+// YT_COOKIES: full Netscape cookie text, or "base64:<base64>"
+// YT_PLAYER_CLIENT: e.g. "web_safari,android_vr,tv"
+const COOKIE_FILE = join(tmpdir(), 'mediakey_yt_cookies.txt');
+const ytCommonArgs = [];
+if (process.env.YT_COOKIES) {
+    try {
+        const raw = process.env.YT_COOKIES.startsWith('base64:')
+            ? Buffer.from(process.env.YT_COOKIES.slice(7), 'base64').toString('utf8')
+            : process.env.YT_COOKIES;
+        writeFileSync(COOKIE_FILE, raw);
+        ytCommonArgs.push('--cookies', COOKIE_FILE);
+        log('🍪 [CONFIG]', 'YouTube cookies loaded');
+    } catch (e) { log('🍪 [CONFIG]', 'Failed to load cookies', e); }
+}
+if (process.env.YT_PLAYER_CLIENT) {
+    ytCommonArgs.push('--extractor-args', `youtube:player_client=${process.env.YT_PLAYER_CLIENT}`);
+    log('⚙️ [CONFIG]', `YouTube player clients: ${process.env.YT_PLAYER_CLIENT}`);
+}
 
 /**
  * AUTO-MAINTENANCE
@@ -74,16 +94,22 @@ app.get('/api/info', async (req, res) => {
         '--no-warnings', '--dump-json', '--no-check-certificates',
         '--remote-components', 'ejs:github',
         '--js-runtimes', 'node',
+        ...ytCommonArgs,
         '--user-agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         url
     ];
 
     const proc = spawn('yt-dlp', args);
     let output = '';
+    let errOutput = '';
     proc.stdout.on('data', (d) => output += d);
-    proc.stderr.on('data', () => {});
+    proc.stderr.on('data', (d) => { errOutput = (errOutput + d.toString()).slice(-4000); });
     proc.on('close', (code) => {
-        if (code !== 0) return res.status(500).json({ error: "Platform blocked request." });
+        if (code !== 0) {
+            const detail = errOutput.trim().split('\n').slice(-3).join(' | ').slice(-500);
+            log('❌ [INFO-FAIL]', detail || `yt-dlp exit ${code}`);
+            return res.status(500).json({ error: "Platform blocked request.", ...(req.query.debug ? { detail: detail || `exit ${code}` } : {}) });
+        }
         try {
             const data = JSON.parse(output);
             let formats = [];
@@ -145,6 +171,7 @@ app.get('/api/download', async (req, res) => {
             '--no-playlist',
             '--remote-components', 'ejs:github',
             '--js-runtimes', 'node',
+            ...ytCommonArgs,
             '--retries', '10',
             '--fragment-retries', '10',
             '--retry-sleep', '2',
