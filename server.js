@@ -47,8 +47,7 @@ if (process.env.YT_COOKIES) {
         log('🍪 [CONFIG]', 'YouTube cookies loaded');
     } catch (e) { log('🍪 [CONFIG]', 'Failed to load cookies', e); }
 }
-const playerClients = process.env.YT_PLAYER_CLIENT
-    || (process.env.RENDER ? 'tv,ios,android_vr' : '');
+const playerClients = process.env.YT_PLAYER_CLIENT || '';
 if (playerClients) {
     ytCommonArgs.push('--extractor-args', `youtube:player_client=${playerClients}`);
     log('⚙️ [CONFIG]', `YouTube player clients: ${playerClients}`);
