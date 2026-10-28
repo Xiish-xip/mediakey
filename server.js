@@ -47,9 +47,11 @@ if (process.env.YT_COOKIES) {
         log('🍪 [CONFIG]', 'YouTube cookies loaded');
     } catch (e) { log('🍪 [CONFIG]', 'Failed to load cookies', e); }
 }
-if (process.env.YT_PLAYER_CLIENT) {
-    ytCommonArgs.push('--extractor-args', `youtube:player_client=${process.env.YT_PLAYER_CLIENT}`);
-    log('⚙️ [CONFIG]', `YouTube player clients: ${process.env.YT_PLAYER_CLIENT}`);
+const playerClients = process.env.YT_PLAYER_CLIENT
+    || (process.env.RENDER ? 'tv,ios,android_vr' : '');
+if (playerClients) {
+    ytCommonArgs.push('--extractor-args', `youtube:player_client=${playerClients}`);
+    log('⚙️ [CONFIG]', `YouTube player clients: ${playerClients}`);
 }
 
 /**
@@ -108,7 +110,7 @@ app.get('/api/info', async (req, res) => {
         if (code !== 0) {
             const detail = errOutput.trim().split('\n').slice(-3).join(' | ').slice(-500);
             log('❌ [INFO-FAIL]', detail || `yt-dlp exit ${code}`);
-            return res.status(500).json({ error: "Platform blocked request.", ...(req.query.debug ? { detail: detail || `exit ${code}` } : {}) });
+            return res.status(500).json({ error: "Platform blocked request.", ...(req.query.debug ? { detail: detail || `exit ${code}`, clients: playerClients || 'default' } : {}) });
         }
         try {
             const data = JSON.parse(output);
